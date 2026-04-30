@@ -19,8 +19,8 @@ saltlakecity <- read_csv("data/saltlakecity.csv")
 seattle      <- read_csv("data/seattle.csv")
 stlouis      <- read_csv("data/stlouis.csv")
 
-#clean up data keeping important coulumns of data and adding TAVG coulumn
-#divide by 10 on temp and precipitation for units of mm and C respecitively
+#clean up data keeping important columns of data and adding TAVG column
+#divide by 10 on temp and precipitation for units of mm and C respectively
 clean_city <- function(df) {
   df %>%
     select(DATE, NAME, PRCP, TMAX, TMIN) %>%
@@ -76,7 +76,6 @@ all_cities <- bind_rows(
   )
 
 #additional cleaning of bad data Chicago had invalid readings until this year
-
 all_cities <- all_cities %>%
   filter(!(city == "Chicago" & year(DATE) < 1959))
 
@@ -95,7 +94,7 @@ annual <- all_cities %>%
   )%>%
   filter(n_days >= 340)
 
-#plotted by region
+#plotting temperature and precipitation annual averages by region
 
 regions <- c("Northeast", "Southeast", "Midwest", "West")
 
@@ -103,7 +102,7 @@ for (r in regions) {
   
   region_data <- filter(annual, region == r)
   
-  # Temperature overlay
+  #Temperature overlay
   p_temp <- ggplot(region_data, aes(x = year, y = tavg_annual, color = city)) +
     geom_line(alpha = 0.7) +
     geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 0.5) +
@@ -111,8 +110,8 @@ for (r in regions) {
          x = "Year", y = "Avg Temperature (°C)", color = "City") +
     theme_minimal()
   
-  # Precipitation overlay exclude Detroit due to bad precipitation data for 20 years
-  #exclude new york for large amounts of bad precipitation data
+  #Precipitation overlay exclude Detroit due to bad precipitation data for 20 years
+  #exclude New York for large amounts of bad precipitation data
   p_prcp <- ggplot(filter(region_data, city != "Detroit", city != "New York"), aes(x = year, y = prcp_annual, color = city)) +
     geom_line(alpha = 0.7) +
     geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 0.5) +
@@ -123,5 +122,10 @@ for (r in regions) {
   print(p_temp)
   print(p_prcp)
 }
+
+
+
+
+
 
 
