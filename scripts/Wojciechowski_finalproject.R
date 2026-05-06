@@ -144,7 +144,7 @@ for (r in regions) {
     scale_fill_gradient2(low = "#d7191c", mid = "white", high = "#1a9641",
                          midpoint = 0, name = "mm / decade", na.value = "grey80") +
     labs(
-      title    = paste(r, "— Precipitation Trend by Month"),
+      title    = paste(r, " Precipitation Trend by Month"),
       subtitle = "mm per decade  |  * = p < 0.05  |  Green = wetter, Red = drier",
       x = "Month", y = NULL
     ) +
@@ -242,7 +242,7 @@ for (r in regions) {
     scale_color_manual(values = period_colors, name = "Period") +
     facet_wrap(~ city, scales = "free", ncol = 2) +
     labs(
-      title    = paste(r, "— Exponential PDF: Daily Precipitation Extremes (p95)"),
+      title    = paste(r, " Exponential PDF: Daily Precipitation Extremes (p = .95)"),
       subtitle = "Fitted Exp(λ = 1/μ)  |  Dashed = period mean  |  Blue = 1960–1980, Red = 2000–2020",
       x        = "Daily Precipitation (mm)",
       y        = "Density"
