@@ -3,6 +3,7 @@ library(ggplot2)
 library(tidyverse)
 library(stats)
 
+#read in each cities data 
 atlanta      <- read_csv("data/atlanta.csv")
 boston       <- read_csv("data/boston.csv")
 charlotte    <- read_csv("data/charlotte.csv")
@@ -20,7 +21,7 @@ saltlakecity <- read_csv("data/saltlakecity.csv")
 seattle      <- read_csv("data/seattle.csv")
 stlouis      <- read_csv("data/stlouis.csv")
 
-#clean up data keeping important columns of data and adding TAVG column
+#clean up data keeping important columns of data
 #divide by 10 on temp and precipitation for units of mm and C respectively
 clean_city <- function(df) {
   df %>%
@@ -30,7 +31,6 @@ clean_city <- function(df) {
       TMAX = TMAX / 10,
       TMIN = TMIN / 10,
       PRCP = PRCP / 10,
-      TAVG = (TMAX + TMIN) / 2
     )
 }
 
@@ -51,7 +51,7 @@ saltlakecity <- clean_city(saltlakecity)
 seattle      <- clean_city(seattle)
 stlouis      <- clean_city(stlouis)
 
-#Combine all cities into one data frame
+#Combine all cities into one data frame add region tags
 
 all_cities <- bind_rows(
   atlanta      %>% mutate(city = "Atlanta",       region = "Southeast"),
@@ -83,44 +83,27 @@ all_cities <- bind_rows(
 
 # extreme thresholds calculations
 
-tmax_thresh <- all_cities %>%
-  group_by(city) %>%
-  summarise(tmax_p90 = quantile(TMAX, 0.90, na.rm = TRUE), .groups = "drop")
-
 prcp_thresh <- all_cities %>%
   filter(PRCP > 0) %>%
   group_by(city) %>%
   summarise(prcp_p95 = quantile(PRCP, 0.95, na.rm = TRUE), .groups = "drop")
 
-tmin_thresh <- all_cities %>%
-  group_by(city) %>%
-  summarise(tmin_p10 = quantile(TMIN, 0.10, na.rm = TRUE), .groups = "drop")
 
+#calculate daily extreme thresholds.
 daily <- all_cities %>%
-  left_join(tmax_thresh, by = "city") %>%
   left_join(prcp_thresh, by = "city") %>%
-  left_join(tmin_thresh, by = "city") %>%
   mutate(
-    hot_day    = !is.na(TMAX) & TMAX > tmax_p90,
-    cold_day   = !is.na(TMIN) & TMIN < tmin_p10,
     heavy_prcp = !is.na(PRCP) & PRCP > prcp_p95 & PRCP > 0
   )
 
-#monthly statistic calculations
+#monthly statistic calculations for percipitation
 
 monthly <- daily %>%
   group_by(city, region, year, month) %>%
   summarise(
     n_days          = n(),
-    tavg_monthly    = mean(TAVG,  na.rm = TRUE),
-    tmax_monthly    = mean(TMAX,  na.rm = TRUE),
-    tmin_monthly    = mean(TMIN,  na.rm = TRUE),
-    tmax_record     = max(TMAX,   na.rm = TRUE),
-    tmin_record     = min(TMIN,   na.rm = TRUE),
     prcp_monthly    = sum(PRCP,   na.rm = TRUE),
     prcp_max_day    = max(PRCP,   na.rm = TRUE),
-    n_hot_days      = sum(hot_day,    na.rm = TRUE),
-    n_cold_days     = sum(cold_day,   na.rm = TRUE),
     n_heavy_prcp    = sum(heavy_prcp, na.rm = TRUE),
     .groups = "drop"
   ) %>%
@@ -128,56 +111,6 @@ monthly <- daily %>%
 
 regions <- levels(monthly$region)
 
-# climatology table construction
-# Temperature (°C): mean, SD, max, min for TAVG, TMAX, and TMIN.
-# Precipitation (mm): mean, SD, max, min of monthly totals.
-# Change over time: linear trend (per decade) for TAVG and PRCP,
-# computed via lm() across all years for that city × month.
-
-fit_slope <- function(y, x) {
-  if (sum(!is.na(y)) < 10) return(NA_real_)
-  coef(lm(y ~ x))[["x"]] * 10
-}
-
-climatology <- monthly %>%
-  group_by(city, region, month) %>%
-  summarise(
-    n_years = n(),
-    # Average temperature
-    tavg_mean = mean(tavg_monthly, na.rm = TRUE),
-    tavg_sd   = sd(tavg_monthly,   na.rm = TRUE),
-    tavg_max  = max(tavg_monthly,  na.rm = TRUE),
-    tavg_min  = min(tavg_monthly,  na.rm = TRUE),
-    # Mean daily max temperature
-    tmax_mean = mean(tmax_monthly, na.rm = TRUE),
-    tmax_sd   = sd(tmax_monthly,   na.rm = TRUE),
-    tmax_max  = max(tmax_record,   na.rm = TRUE),   # all-time hottest day
-    tmax_min  = min(tmax_monthly,  na.rm = TRUE),
-    # Mean daily min temperature
-    tmin_mean = mean(tmin_monthly, na.rm = TRUE),
-    tmin_sd   = sd(tmin_monthly,   na.rm = TRUE),
-    tmin_max  = max(tmin_monthly,  na.rm = TRUE),
-    tmin_min  = min(tmin_record,   na.rm = TRUE),   # all-time coldest day
-    # Precipitation
-    prcp_mean = mean(prcp_monthly, na.rm = TRUE),
-    prcp_sd   = sd(prcp_monthly,   na.rm = TRUE),
-    prcp_max  = max(prcp_monthly,  na.rm = TRUE),
-    prcp_min  = min(prcp_monthly,  na.rm = TRUE),
-    # Change over time
-    tavg_trend_per_decade = fit_slope(tavg_monthly, year),
-    tmax_trend_per_decade = fit_slope(tmax_monthly, year),
-    tmin_trend_per_decade = fit_slope(tmin_monthly, year),
-    prcp_trend_per_decade = fit_slope(prcp_monthly, year),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    month_label = factor(month.abb[month], levels = month.abb),
-    across(where(is.numeric), ~ round(.x, 2))
-  ) %>%
-  arrange(region, city, month)
-
-dir.create("output", showWarnings = FALSE)
-write_csv(climatology, "output/climatology_all_cities.csv")
 
 #monthly trends heatmaps for each city
 
@@ -186,37 +119,6 @@ fit_trend <- function(y, x) {
   m <- lm(y ~ x)
   c(slope = coef(m)[["x"]] * 10,
     pval  = summary(m)$coefficients["x", "Pr(>|t|)"])
-}
-
-# Temperature heatmaps
-month_trends_temp <- monthly %>%
-  group_by(city, region, month) %>%
-  summarise(
-    slope = fit_trend(tavg_monthly, year)[["slope"]],
-    pval  = fit_trend(tavg_monthly, year)[["pval"]],
-    .groups = "drop"
-  ) %>%
-  mutate(
-    month_label = factor(month.abb[month], levels = month.abb),
-    significant = !is.na(pval) & pval < 0.05
-  )
-
-for (r in regions) {
-  p <- ggplot(filter(month_trends_temp, region == r),
-              aes(x = month_label, y = city, fill = slope)) +
-    geom_tile(color = "white", linewidth = 0.4) +
-    geom_text(aes(label = ifelse(significant, "*", "")),
-              color = "white", size = 4.5, vjust = 0.8) +
-    scale_fill_gradient2(low = "#2166ac", mid = "white", high = "#d6604d",
-                         midpoint = 0, name = "°C / decade", na.value = "grey80") +
-    labs(
-      title    = paste(r, "— Temperature Trend by Month"),
-      subtitle = "°C per decade  |  * = p < 0.05  |  Red = warming, Blue = cooling",
-      x = "Month", y = NULL
-    ) +
-    theme_minimal() +
-    theme(axis.text.y = element_text(size = 9))
-  print(p)
 }
 
 # Precipitation heatmaps
@@ -232,7 +134,7 @@ month_trends_prcp <- monthly %>%
     month_label = factor(month.abb[month], levels = month.abb),
     significant = !is.na(pval) & pval < 0.05
   )
-
+#create heatmaps for ach region
 for (r in regions) {
   p <- ggplot(filter(month_trends_prcp, region == r),
               aes(x = month_label, y = city, fill = slope)) +
@@ -252,8 +154,108 @@ for (r in regions) {
 }
 
 
+# Exponential fit on daily precipitation extremes 
 
+#create period labels
+period_labels <- c("1960–1980", "2000–2020")
+period_colors <- c("1960–1980" = "#2166ac", "2000–2020" = "#d6604d")
 
+extreme_prcp <- daily %>%
+  filter(
+    PRCP > prcp_p95,
+    year %in% c(1960:1980, 2000:2020)
+  ) %>%
+  mutate(
+    period = case_when(
+      year <= 1980 ~ "1960–1980",
+      year >= 2000 ~ "2000–2020"
+    ),
+    period = factor(period, levels = period_labels)
+  ) %>%
+  filter(!is.na(PRCP), PRCP > 0)
+
+#compute exponential parameters including lamda, higher lamda = less extreme events
+exp_fits <- extreme_prcp %>%
+  group_by(city, region, period) %>%
+  summarise(
+    n      = n(),
+    lambda = 1 / mean(PRCP, na.rm = TRUE),
+    mean_x = mean(PRCP, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+#set x bounds based on most extreme event for each city
+x_grid <- extreme_prcp %>%
+  group_by(city) %>%
+  summarise(x_max = max(PRCP, na.rm = TRUE), .groups = "drop")
+
+#build exponential curves for each city
+exp_curves <- exp_fits %>%
+  left_join(x_grid, by = "city") %>%
+  rowwise() %>%
+  mutate(
+    x   = list(seq(0.01, x_max, length.out = 400)),
+    pdf = list(dexp(seq(0.01, x_max, length.out = 400), rate = lambda))
+  ) %>%
+  unnest(c(x, pdf)) %>%
+  select(city, region, period, lambda, mean_x, n, x, pdf)
+
+#build annotation labels to avoid overlap
+ann <- exp_fits %>%
+  group_by(city, region) %>%
+  mutate(
+    y_pos = max(lambda) * c(1.0, 0.75),
+    label = paste0(period, "  μ = ", round(mean_x, 1), " mm  n = ", n)
+  ) %>%
+  ungroup()
+
+#build graphs for each region.
+for (r in regions) {
+  
+  curves_r <- filter(exp_curves,   region == r)
+  raw_r    <- filter(extreme_prcp, region == r)
+  ann_r    <- filter(ann,          region == r)
+  
+  p <- ggplot() +
+    geom_histogram(
+      data     = raw_r,
+      aes(x = PRCP, y = after_stat(density), fill = period),
+      binwidth = 4, alpha = 0.20, position = "identity", color = NA
+    ) +
+    geom_line(
+      data      = curves_r,
+      aes(x = x, y = pdf, color = period),
+      linewidth = 1.2
+    ) +
+    geom_vline(
+      data     = exp_fits %>% filter(region == r),
+      aes(xintercept = mean_x, color = period),
+      linetype = "dashed", linewidth = 0.7, alpha = 0.8
+    ) +
+    geom_text(
+      data  = ann_r,
+      aes(label = label, color = period, y = y_pos),
+      x     = Inf, hjust = 1.05, size = 2.6,
+      lineheight = 1.2, show.legend = FALSE
+    ) +
+    scale_fill_manual(values  = period_colors, name = "Period") +
+    scale_color_manual(values = period_colors, name = "Period") +
+    facet_wrap(~ city, scales = "free", ncol = 2) +
+    labs(
+      title    = paste(r, "— Exponential PDF: Daily Precipitation Extremes (p95)"),
+      subtitle = "Fitted Exp(λ = 1/μ)  |  Dashed = period mean  |  Blue = 1960–1980, Red = 2000–2020",
+      x        = "Daily Precipitation (mm)",
+      y        = "Density"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      strip.text       = element_text(face = "bold", size = 9),
+      legend.position  = "bottom",
+      panel.grid.minor = element_blank()
+    )
+  
+  print(p)
+}
  
 
 
