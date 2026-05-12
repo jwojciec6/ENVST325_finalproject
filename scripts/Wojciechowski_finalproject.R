@@ -4,6 +4,7 @@ library(tidyverse)
 library(stats)
 
 #read in each cities data 
+# set working directory to ENVST325_finalproject before running code.
 atlanta      <- read_csv("data/atlanta.csv")
 boston       <- read_csv("data/boston.csv")
 charlotte    <- read_csv("data/charlotte.csv")
@@ -191,7 +192,6 @@ exp_fits <- all_prcp %>%
 # Build smooth exponential PDF curves for each city and period
 # starting at 1mm to avoid the y-axis spike at zero inflating the scale for better visuals
 exp_curves <- exp_fits %>%
-  left_join(x_grid, by = "city") %>%
   rowwise() %>%
   mutate(
     x   = list(seq(1, 30, length.out = 400)),
